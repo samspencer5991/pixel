@@ -38,8 +38,7 @@ extern "C" {
 #define DATA_PIN GPIO_PIN_15
 #define DATA_PORT GPIOB
 
-#define SPI_BYTE_MULTIPLIER	9
-#define NUM_SPI_RESET_BYTES 2
+
 
 /*Adafruit's WS2812 Gamma Reduction Table*/
 const uint8_t gamma8[] = {
@@ -74,7 +73,7 @@ uint8_t brightness = 200;	// Note that 56 is the lowest brightness that maintain
 uint8_t* pixelBufferSpi;
 
 // Pixel buffer if non-spi implementation is used
-uint32_t pixelBuffer[NUM_PIXELS * SPI_BYTE_MULTIPLIER + NUM_SPI_RESET_BYTES];
+uint32_t* pixelBuffer;;
 
 /**
   * @brief Initialise default starts on startup for LEDs
@@ -84,7 +83,7 @@ uint32_t pixelBuffer[NUM_PIXELS * SPI_BYTE_MULTIPLIER + NUM_SPI_RESET_BYTES];
   * 							3 = GBR
   * @retval none
   */
-void ws2812_init(uint8_t mode, uint16_t num, uint8_t* buf)
+void ws2812_init(uint8_t mode, uint16_t num, uint32_t* buf)
 {
 	pixelBuffer = buf;
 	colourOrder = mode;

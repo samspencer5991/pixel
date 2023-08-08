@@ -47,10 +47,12 @@ typedef enum
 #define SEA_FOAM		0x6be58c
 #define OFF 				0x000000
 
+#define SPI_BYTE_MULTIPLIER	9
+#define NUM_SPI_RESET_BYTES 2
 #define PIXEL_BUFFER_SIZE_SPI(num) (num * SPI_BYTE_MULTIPLIER + NUM_SPI_RESET_BYTES)
 
 /* BIT-BANGING FUNCTIONS */
-void ws2812_init(uint8_t colourMode, uint16_t num, uint8_t* buf);
+void ws2812_init(uint8_t colourMode, uint16_t num, uint32_t* buf);
 void ws2812_setPixel(uint16_t num, uint32_t colour);
 void ws2812_show();
 
