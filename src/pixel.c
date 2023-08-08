@@ -28,6 +28,10 @@
 #include "gpio.h"
 #include <stdlib.h>
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define HIGH_BIT 0b110
 #define LOW_BIT 0b100
 
@@ -108,7 +112,7 @@ void ws2812_initSpi(uint8_t mode, uint16_t num, SPI_HandleTypeDef *spiHandle)
 	hspi = spiHandle;
 	if(pixelBufferSpi == NULL)
 	{
-		return ArgbMemError;
+		return;
 	}
 	uint8_t resetCounter = (spiBufferSize - NUM_SPI_RESET_BYTES);
 	for(uint8_t i=resetCounter; i<spiBufferSize; i++)
@@ -454,4 +458,7 @@ void ws2812_show()
 	{
 		asm("NOP");
 	}
+#ifdef __cplusplus
+}
+#endif
 }

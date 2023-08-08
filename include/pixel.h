@@ -11,6 +11,10 @@
 #include <stdint.h>
 #include "spi.h"
 
+#ifdef __cplusplus
+extern "C" {
+#endif
+
 #define NUM_PIXELS 8
 
 typedef enum
@@ -60,4 +64,8 @@ ArgbErrorState ws2812_showSpi();
 void ws2812_setBrightness(uint8_t newBrightness);
 uint8_t ws2812_getBrightness();
 uint32_t ws2812_scaleColour(uint32_t colour, uint8_t brightness);
+
+#ifdef __cplusplus
+}
+#endif
 #endif /* PIXEL_H_ */
