@@ -71,7 +71,7 @@ uint8_t brightness = 200;	// Note that 56 is the lowest brightness that maintain
  * So, a single colour channel (R, G, or B) for a pixel takes up 24 storage bits
  * Thus, the pixelBuffer_SPI needs to store 3 24-bit chunks of data for each pixel
 */
-uint8_t pixelBufferSpi[NUM_PIXELS * SPI_BYTE_MULTIPLIER + NUM_SPI_RESET_BYTES];
+uint8_t* pixelBufferSpi;
 
 // Pixel buffer if non-spi implementation is used
 uint32_t pixelBuffer[NUM_PIXELS * SPI_BYTE_MULTIPLIER + NUM_SPI_RESET_BYTES];
@@ -84,8 +84,9 @@ uint32_t pixelBuffer[NUM_PIXELS * SPI_BYTE_MULTIPLIER + NUM_SPI_RESET_BYTES];
   * 							3 = GBR
   * @retval none
   */
-void ws2812_init(uint8_t mode, uint16_t num)
+void ws2812_init(uint8_t mode, uint16_t num, uint8_t* buf)
 {
+	pixelBuffer = buf;
 	colourOrder = mode;
 	numPixels = num;
 	for(int i=0; i<numPixels; i++)
@@ -103,17 +104,14 @@ void ws2812_init(uint8_t mode, uint16_t num)
   * 							3 = GBR
   * @retval none
   */
-void ws2812_initSpi(uint8_t mode, uint16_t num, SPI_HandleTypeDef *spiHandle)
+void ws2812_initSpi(uint8_t mode, uint16_t num, SPI_HandleTypeDef *spiHandle, uint8_t* buf)
 {
+	pixelBufferSpi = buf;
 	// Assign non-dynamic parameters
 	colourOrder = mode;
 	numPixels = num;
 	spiBufferSize = numPixels * SPI_BYTE_MULTIPLIER + NUM_SPI_RESET_BYTES;
 	hspi = spiHandle;
-	if(pixelBufferSpi == NULL)
-	{
-		return;
-	}
 	uint8_t resetCounter = (spiBufferSize - NUM_SPI_RESET_BYTES);
 	for(uint8_t i=resetCounter; i<spiBufferSize; i++)
 	{
