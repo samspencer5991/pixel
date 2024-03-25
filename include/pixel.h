@@ -79,6 +79,7 @@ void pixel_Init(PixelDriver* leds);
 void pixel_SetPixel(PixelDriver* leds, uint16_t index, uint32_t colour);
 ArgbErrorState pixel_Show(PixelDriver* leds);
 uint32_t pixel_ScaleColour(uint32_t colour, uint8_t brightness);
+void pixel_Clear(PixelDriver* leds);
 
 #ifdef __cplusplus
 }

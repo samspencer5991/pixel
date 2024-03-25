@@ -121,7 +121,14 @@ uint32_t pixel_ScaleColour(uint32_t colour, uint8_t brightness)
   */
 void pixel_Clear(PixelDriver* leds)
 {
-	if(leds->protocol == LedSpi)
+	if(leds->protocol == LedGpio || leds->protocol == LedPwm)
+	{
+		for(int i=0; i < leds->numPixels; i++)
+		{
+			leds->pixelBuffer[i] = OFF;
+		}
+	}
+	else if(leds->protocol == LedSpi)
 	{
 		for(int i=0; i < leds->numPixels; i++)
 		{
