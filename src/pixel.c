@@ -40,7 +40,7 @@ extern "C" {
 
 
 
-/*Adafruit's WS2812 Gamma Reduction Table*/
+// Adafruit's WS2812 Gamma Reduction Table
 const uint8_t gamma8[] = {
     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
     0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
@@ -59,42 +59,14 @@ const uint8_t gamma8[] = {
   177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
-uint8_t colourOrder;
-uint16_t numPixels;			// Number of physical LEDs (pixels) used
-uint8_t brightness = 200;	// Note that 56 is the lowest brightness that maintains accurate colour
 
-/**
- * Holds the SPI format data to be sent. Each pixel bit (1 or 0 pulse) takes up 3 SPI bits
- * So, a single colour channel (R, G, or B) for a pixel takes up 24 storage bits
- * Thus, the pixelBuffer_SPI needs to store 3 24-bit chunks of data for each pixel
-*/
-uint8_t* pixelBufferSpi;
-uint16_t spiBufferSize;		// Number of elements in the SPI buffer for numPixels
-SPI_HandleTypeDef *hspi;	// Hardware HAL spi handle
+// Local function prototypes
+void setPixelSpi(PixelDriver* leds, uint16_t num, uint32_t colour);
+ArgbErrorState showSpi(PixelDriver* leds);
+void show(PixelDriver* leds);
 
-// Pixel buffer if non-spi implementation is used
-uint32_t* pixelBuffer;
 
-/**
-  * @brief Initialise default starts on startup for LEDs
-  * @param colourMode	sets the order for r,g,b components:
-  * 							1 = RGB
-  * 							2 = BRG
-  * 							3 = GBR
-  * @retval none
-  */
-void ws2812_init(uint8_t mode, uint16_t num, uint32_t* buf)
-{
-	pixelBuffer = buf;
-	colourOrder = mode;
-	numPixels = num;
-	for(int i=0; i<numPixels; i++)
-	{
-		pixelBuffer[i] = OFF;
-	}
-	ws2812_show();
-}
-
+// Global functions
 /**
   * @brief Initialise default starts on startup for LEDs using unified mode
   * @param leds	structure for the PixelDriver.
@@ -104,12 +76,26 @@ void ws2812_init(uint8_t mode, uint16_t num, uint32_t* buf)
   */
 void pixel_Init(PixelDriver* leds)
 {
+	// General
 	for(int i=0; i<leds->numPixels; i++)
 	{
 		leds->pixelBuffer[i] = OFF;
 	}
+
+	// SPI specific
+	for(uint16_t i=0; i<PIXEL_BUFFER_SIZE_SPI(leds->numPixels); i++)
+	{
+		leds->pixelBuffer[i] = 0x00;
+	}
 }
 
+
+/**
+  * @brief Returns a 24-bit colour value scaled by the brightness value
+  * @param colour			24-bit colour reference value
+  * @param brightness	0-255 (8-bit) scaling factor
+  * @retval none
+  */
 uint32_t pixel_ScaleColour(uint32_t colour, uint8_t brightness)
 {
 	uint8_t r = ((colour>>16) & 0xff);
@@ -129,136 +115,112 @@ uint32_t pixel_ScaleColour(uint32_t colour, uint8_t brightness)
 }
 
 /**
-  * @brief Initialise default starts on startup for LEDs using SPI mode
-  * @param colourMode	sets the order for r,g,b components:
-  * 							1 = RGB
-  * 							2 = BRG
-  * 							3 = GBR
-  * @retval none
-  */
-void ws2812_initSpi(uint8_t mode, uint16_t num, SPI_HandleTypeDef *spiHandle, uint8_t* buf)
-{
-	pixelBufferSpi = buf;
-	// Assign non-dynamic parameters
-	colourOrder = mode;
-	numPixels = num;
-	spiBufferSize = numPixels * SPI_BYTE_MULTIPLIER + NUM_SPI_RESET_BYTES;
-	hspi = spiHandle;
-	uint8_t resetCounter = (spiBufferSize - NUM_SPI_RESET_BYTES);
-	for(uint8_t i=resetCounter; i<spiBufferSize; i++)
-	{
-		pixelBufferSpi[i] = 0x00;
-	}
-	ws2812_clearSpi();
-	ws2812_showSpi();
-
-}
-
-void ws2812_setBrightness(uint8_t newBrightness)
-{
-	brightness = newBrightness;
-	return;
-}
-
-uint8_t ws2812_getBrightness()
-{
-	return brightness;
-}
-
-uint32_t ws2812_scaleColour(uint32_t colour, uint8_t brightness)
-{
-	uint8_t r = ((colour>>16) & 0xff);
-	uint8_t g = ((colour>>8) & 0xff);
-	uint8_t b = (colour & 0xff);
-	if(brightness != 255)
-	{
-		float rChunk = (float)r / 255.00;
-		float gChunk = (float)g / 255.00;
-		float bChunk = (float)b / 255.00;
-
-		r = rChunk * brightness;
-		g = gChunk * brightness;
-		b = bChunk * brightness;
-	}
-	return (r<<16) + (g<<8) + b;
-}
-
-/**
   * @brief Helper function to clear all LEDs. Note that show_SPI must be called to clear
-  * @param none
+  * @param leds	structure for the PixelDriver.
   * @retval none
   */
-void ws2812_clearSpi()
+void pixel_Clear(PixelDriver* leds)
 {
-	for(int i=0; i<numPixels; i++)
+	if(leds->protocol == LedSpi)
 	{
-		ws2812_setPixelSpi(i, OFF);
+		for(int i=0; i < leds->numPixels; i++)
+		{
+			setPixelSpi(leds, i, OFF);
+		}
 	}
 }
 
 /**
   * @brief Checks the colour mode and assigns pixel number (num) a 24-bit colour value (colour)
+  * @param leds	structure for the PixelDriver.
   * @param num		pixel number to set
   * @param colour	24-bit colour to assign to pixel
   * @retval none
   */
-void ws2812_setPixel(uint16_t num, uint32_t colour)
-{
-	uint32_t outputColour = 0x00000000;
-	uint8_t r = 0;
-	uint8_t g = 0;
-	uint8_t b = 0;
-	if(num < numPixels)
-	{
-		if(colourOrder == ORDER_RGB)
-		{
-			r = (colour >> 16) & 0xff;
-			g = (colour >> 8) & 0xff;
-			b = (colour) & 0xff;
-		}
-		else if(colourOrder == ORDER_GBR)
-		{
-			r = (colour) & 0xff;
-			g = (colour >> 16) & 0xff;
-			b = (colour >> 8) & 0xff;
-		}
-		outputColour = g | (r<<8) | (b<<16);
-		pixelBuffer[num] = outputColour;
-	}
-}
-
 void pixel_SetPixel(PixelDriver* leds, uint16_t index, uint32_t colour)
 {
-	uint32_t outputColour = 0x00000000;
-	uint8_t r = 0;
-	uint8_t g = 0;
-	uint8_t b = 0;
-	if(index < leds->numPixels)
+	if(leds->protocol == LedGpio || leds->protocol == LedPwm)
 	{
-		if(colourOrder == ORDER_RGB)
+		uint32_t outputColour = 0x00000000;
+		uint8_t r = 0;
+		uint8_t g = 0;
+		uint8_t b = 0;
+		if(index < leds->numPixels)
 		{
-			r = (colour >> 16) & 0xff;
-			g = (colour >> 8) & 0xff;
-			b = (colour) & 0xff;
+			if(leds->colourMode == ORDER_RGB)
+			{
+				r = (colour >> 16) & 0xff;
+				g = (colour >> 8) & 0xff;
+				b = (colour) & 0xff;
+			}
+			else if(leds->colourMode == ORDER_GBR)
+			{
+				r = (colour) & 0xff;
+				g = (colour >> 16) & 0xff;
+				b = (colour >> 8) & 0xff;
+			}
+			outputColour = g | (r<<8) | (b<<16);
+			leds->pixelBuffer[index] = outputColour;
 		}
-		else if(colourOrder == ORDER_GBR)
-		{
-			r = (colour) & 0xff;
-			g = (colour >> 16) & 0xff;
-			b = (colour >> 8) & 0xff;
-		}
-		outputColour = g | (r<<8) | (b<<16);
-		leds->pixelBuffer[index] = outputColour;
+	}
+	else if(leds->protocol == LedSpi)
+	{
+		setPixelSpi(leds, index, colour);
 	}
 }
 
+ArgbErrorState pixel_Show(PixelDriver* leds)
+{
+	if(leds->protocol == LedPwm)
+	{
+		uint32_t index = 0;
+		uint32_t tempColor;
+		for (int i= 0; i<leds->numPixels; i++)
+		{
+			tempColor = ((leds->pixelBuffer[i]<<16) | (leds->pixelBuffer[i]<<8) | (leds->pixelBuffer[i]));
+
+			for (int i=23; i>=0; i--)
+			{
+				if (tempColor&(1<<i))
+					leds->altPixelBuffer[index] = 69;  // 2/3 of 90
+
+				else
+					leds->altPixelBuffer[index] = 35;  // 1/3 of 90
+
+				index++;
+			}
+		}
+
+		for (int i=0; i<50; i++)
+		{
+			leds->altPixelBuffer[index] = 0;
+			index++;
+		}
+		leds->htim->Instance->CCR3 = 0;
+		leds->htim->Instance->CNT = 0;
+		leds->ready = 0;
+		if(HAL_TIM_PWM_Start_DMA(leds->htim, leds->timChannel, (uint32_t*)leds->altPixelBuffer, index) != HAL_OK)
+			return ArgbHalError;
+		else
+			return ArgbOk;
+		
+	}
+	else if(leds->protocol == LedSpi)
+	{
+		return showSpi(leds);
+	}
+	return ArgbOk;
+}
+
+
+// Local functions
 /**
   * @brief Checks the colour mode and assigns pixel number (num) a 24-bit colour value (colour)
   * @param num		pixel number to set
   * @param colour	24-bit colour to assign to pixel
   * @retval none
   */
-void ws2812_setPixelSpi(uint16_t pixel, uint32_t colour)
+void setPixelSpi(PixelDriver* leds, uint16_t pixel, uint32_t colour)
 {
 	uint16_t num = pixel*9;
 	uint8_t r = 0;
@@ -268,23 +230,23 @@ void ws2812_setPixelSpi(uint16_t pixel, uint32_t colour)
 	unsigned long r24 = 0;
 	unsigned long b24 = 0;
 
-	if(pixel < numPixels)
+	if(pixel < leds->numPixels)
 	{
 		//depending on the set order, extract each colour channel
 		// Gamma correct is now post brightness scaling for better linearity
-		if(colourOrder == ORDER_RGB)
+		if(leds->colourMode == ORDER_RGB)
 		{
 			r = (colour >> 16) & 0xff;
 			g = (colour >> 8) & 0xff;
 			b = (colour) & 0xff;
 		}
-		else if(colourOrder == ORDER_BRG)
+		else if(leds->colourMode == ORDER_BRG)
 		{
 			r = (colour >> 8) & 0xff;
 			g = (colour) & 0xff;
 			b = (colour >> 16) & 0xff;
 		}
-		else if(colourOrder == ORDER_GBR)
+		else if(leds->colourMode == ORDER_GBR)
 		{
 			r = gamma8[(colour) & 0xff];
 			g = gamma8[(colour >> 16) & 0xff];
@@ -294,15 +256,15 @@ void ws2812_setPixelSpi(uint16_t pixel, uint32_t colour)
 		// Scale colour channels according to set brightness
 		// Check if a brightness has been set
 		// Gamma correction now post brightnes
-		if(brightness != 255)
+		if(leds->brightness != 255)
 		{
 			float rChunk = (float)r / 255.00;
 			float gChunk = (float)g / 255.00;
 			float bChunk = (float)b / 255.00;
 
-			r = rChunk * brightness;
-			g = gChunk * brightness;
-			b = bChunk * brightness;
+			r = rChunk * leds->brightness;
+			g = gChunk * leds->brightness;
+			b = bChunk * leds->brightness;
 		}
 		r = gamma8[r];
 		g = gamma8[g];
@@ -338,17 +300,17 @@ void ws2812_setPixelSpi(uint16_t pixel, uint32_t colour)
 		}
 
 		//fill the SPI buffer from the RGB channel contents
-		pixelBufferSpi[num] = (g24 >> 16) & 0xff;
-		pixelBufferSpi[num+1] = (g24 >> 8) & 0xff;
-		pixelBufferSpi[num+2] = (g24) & 0xff;
+		leds->altPixelBuffer[num] = (g24 >> 16) & 0xff;
+		leds->altPixelBuffer[num+1] = (g24 >> 8) & 0xff;
+		leds->altPixelBuffer[num+2] = (g24) & 0xff;
 
-		pixelBufferSpi[num+3] = (r24 >> 16) & 0xff;
-		pixelBufferSpi[num+4] = (r24 >> 8) & 0xff;
-		pixelBufferSpi[num+5] = (r24) & 0xff;
+		leds->altPixelBuffer[num+3] = (r24 >> 16) & 0xff;
+		leds->altPixelBuffer[num+4] = (r24 >> 8) & 0xff;
+		leds->altPixelBuffer[num+5] = (r24) & 0xff;
 
-		pixelBufferSpi[num+6] = (b24 >> 16) & 0xff;
-		pixelBufferSpi[num+7] = (b24 >> 8) & 0xff;
-		pixelBufferSpi[num+8] = (b24) & 0xff;
+		leds->altPixelBuffer[num+6] = (b24 >> 16) & 0xff;
+		leds->altPixelBuffer[num+7] = (b24 >> 8) & 0xff;
+		leds->altPixelBuffer[num+8] = (b24) & 0xff;
 	}
 }
 
@@ -357,45 +319,13 @@ void ws2812_setPixelSpi(uint16_t pixel, uint32_t colour)
   * @param none
   * @retval none
   */
-ArgbErrorState ws2812_showSpi()
+ArgbErrorState showSpi(PixelDriver* leds)
 {
-	if(HAL_SPI_Transmit_DMA(hspi, pixelBufferSpi, spiBufferSize) != HAL_OK)
+	if(HAL_SPI_Transmit_DMA(leds->hspi, leds->altPixelBuffer, PIXEL_BUFFER_SIZE_SPI(leds->numPixels)) != HAL_OK)
 	{
 		return ArgbHalError;
 	}
 	return ArgbOk;
-}
-
-void pixel_Show(PixelDriver* leds)
-{
-	uint32_t index = 0;
-	uint32_t tempColor;
-	for (int i= 0; i<leds->numPixels; i++)
-	{
-		tempColor = ((leds->pixelBuffer[i]<<16) | (leds->pixelBuffer[i]<<8) | (leds->pixelBuffer[i]));
-
-		for (int i=23; i>=0; i--)
-		{
-			if (tempColor&(1<<i))
-				leds->pwmData[index] = 69;  // 2/3 of 90
-
-			else
-				leds->pwmData[index] = 35;  // 1/3 of 90
-
-			index++;
-		}
-
-	}
-
-	for (int i=0; i<50; i++)
-	{
-		leds->pwmData[index] = 0;
-		index++;
-	}
-	leds->htim->Instance->CCR3 = 0;
-	leds->htim->Instance->CNT = 0;
-	HAL_TIM_PWM_Start_DMA(leds->htim, leds->timChannel, (uint32_t*)leds->pwmData, index);
-	leds->ready = 0;
 }
 
 /**
@@ -403,13 +333,13 @@ void pixel_Show(PixelDriver* leds)
   * @param none
   * @retval none
   */
-void ws2812_show()
+void show(PixelDriver* leds)
 {
 	uint32_t frame = 0;
 	__disable_irq();
-	for(int j=0; j<numPixels; j++)
+	for(int j=0; j<leds->numPixels; j++)
 	{
-		frame = pixelBuffer[j];
+		frame = leds->pixelBuffer[j];
 		for(int i=0; i<24; i++)
 		{
 			if((frame >> i) & 1)

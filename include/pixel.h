@@ -34,16 +34,16 @@ typedef enum
 
 typedef struct
 {
-	LedProtocol protocol;
-	uint8_t colourMode;
-	uint32_t* pixelBuffer;
-	uint16_t numPixels;
-	uint8_t brightness;
-	TIM_HandleTypeDef* htim;
-	SPI_HandleTypeDef* hspi;
-	uint16_t timChannel;
-	uint8_t* pwmData;
-	uint8_t ready;
+	LedProtocol protocol;		// GPIO (bit-bang), SPI (DMA), PWM (DMA)
+	uint8_t colourMode;			// 1 = RGB, 2 = BRG, 3 = GBR
+	uint32_t* pixelBuffer;		// 24-bit colour buffer (one uint32_t per pixel)
+	uint16_t numPixels;			// Total number of LEDs
+	uint8_t brightness;			// Global brightness scaling
+	TIM_HandleTypeDef* htim;	// STM32 HAL timer handle
+	uint16_t timChannel;			// PWM only
+	SPI_HandleTypeDef* hspi;	// STM32 HAL SPI handle
+	uint8_t* altPixelBuffer;	// Used for SPI bit packets or PWM data
+	uint8_t ready;					// Indicates if the previous transmission is complete. Set init value to 0 or undefined
 } PixelDriver;
 
 #define ORDER_RGB 1
@@ -70,29 +70,15 @@ typedef struct
 
 #define SPI_BYTE_MULTIPLIER	9
 #define NUM_SPI_RESET_BYTES 2
+
+// Used to define the altPixelBuffer size for SPI
 #define PIXEL_BUFFER_SIZE_SPI(num) (num * SPI_BYTE_MULTIPLIER + NUM_SPI_RESET_BYTES)
 
-// BIT-BANGING FUNCTIONS 
-void ws2812_init(uint8_t colourMode, uint16_t num, uint32_t* buf);
-void ws2812_setPixel(uint16_t num, uint32_t colour);
-void ws2812_show();
-
-// SPI-DMA FUNCTIONS 
-void ws2812_initSpi(uint8_t mode, uint16_t num, SPI_HandleTypeDef *spiHandle, uint8_t* buf);
-void ws2812_clearSpi();
-void ws2812_setPixelSpi(uint16_t num, uint32_t colour);
-ArgbErrorState ws2812_showSpi();
-
 // SHARED FUNCTIONS 
-void ws2812_setBrightness(uint8_t newBrightness);
-uint8_t ws2812_getBrightness();
-uint32_t ws2812_scaleColour(uint32_t colour, uint8_t brightness);
-
 void pixel_Init(PixelDriver* leds);
 void pixel_SetPixel(PixelDriver* leds, uint16_t index, uint32_t colour);
-void pixel_Show(PixelDriver* leds);
+ArgbErrorState pixel_Show(PixelDriver* leds);
 uint32_t pixel_ScaleColour(uint32_t colour, uint8_t brightness);
-
 
 #ifdef __cplusplus
 }
