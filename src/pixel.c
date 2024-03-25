@@ -61,8 +61,6 @@ const uint8_t gamma8[] = {
 
 uint8_t colourOrder;
 uint16_t numPixels;			// Number of physical LEDs (pixels) used
-uint16_t spiBufferSize;		// Number of elements in the SPI buffer for numPixels
-SPI_HandleTypeDef *hspi;	// Hardware HAL spi handle
 uint8_t brightness = 200;	// Note that 56 is the lowest brightness that maintains accurate colour
 
 /**
@@ -71,9 +69,11 @@ uint8_t brightness = 200;	// Note that 56 is the lowest brightness that maintain
  * Thus, the pixelBuffer_SPI needs to store 3 24-bit chunks of data for each pixel
 */
 uint8_t* pixelBufferSpi;
+uint16_t spiBufferSize;		// Number of elements in the SPI buffer for numPixels
+SPI_HandleTypeDef *hspi;	// Hardware HAL spi handle
 
 // Pixel buffer if non-spi implementation is used
-uint32_t* pixelBuffer;;
+uint32_t* pixelBuffer;
 
 /**
   * @brief Initialise default starts on startup for LEDs
@@ -93,6 +93,39 @@ void ws2812_init(uint8_t mode, uint16_t num, uint32_t* buf)
 		pixelBuffer[i] = OFF;
 	}
 	ws2812_show();
+}
+
+/**
+  * @brief Initialise default starts on startup for LEDs using unified mode
+  * @param leds	structure for the PixelDriver.
+  * 					Members must already be assigned prior to calling this function.
+  * 					This function can also be called to clear all LED colours
+  * @retval none
+  */
+void pixel_Init(PixelDriver* leds)
+{
+	for(int i=0; i<leds->numPixels; i++)
+	{
+		leds->pixelBuffer[i] = OFF;
+	}
+}
+
+uint32_t pixel_ScaleColour(uint32_t colour, uint8_t brightness)
+{
+	uint8_t r = ((colour>>16) & 0xff);
+	uint8_t g = ((colour>>8) & 0xff);
+	uint8_t b = (colour & 0xff);
+	if(brightness != 255)
+	{
+		float rChunk = (float)r / 255.00;
+		float gChunk = (float)g / 255.00;
+		float bChunk = (float)b / 255.00;
+
+		r = rChunk * brightness;
+		g = gChunk * brightness;
+		b = bChunk * brightness;
+	}
+	return (r<<16) + (g<<8) + b;
 }
 
 /**
@@ -191,6 +224,31 @@ void ws2812_setPixel(uint16_t num, uint32_t colour)
 		}
 		outputColour = g | (r<<8) | (b<<16);
 		pixelBuffer[num] = outputColour;
+	}
+}
+
+void pixel_SetPixel(PixelDriver* leds, uint16_t index, uint32_t colour)
+{
+	uint32_t outputColour = 0x00000000;
+	uint8_t r = 0;
+	uint8_t g = 0;
+	uint8_t b = 0;
+	if(index < leds->numPixels)
+	{
+		if(colourOrder == ORDER_RGB)
+		{
+			r = (colour >> 16) & 0xff;
+			g = (colour >> 8) & 0xff;
+			b = (colour) & 0xff;
+		}
+		else if(colourOrder == ORDER_GBR)
+		{
+			r = (colour) & 0xff;
+			g = (colour >> 16) & 0xff;
+			b = (colour >> 8) & 0xff;
+		}
+		outputColour = g | (r<<8) | (b<<16);
+		leds->pixelBuffer[index] = outputColour;
 	}
 }
 
@@ -306,6 +364,38 @@ ArgbErrorState ws2812_showSpi()
 		return ArgbHalError;
 	}
 	return ArgbOk;
+}
+
+void pixel_Show(PixelDriver* leds)
+{
+	uint32_t index = 0;
+	uint32_t tempColor;
+	for (int i= 0; i<leds->numPixels; i++)
+	{
+		tempColor = ((leds->pixelBuffer[i]<<16) | (leds->pixelBuffer[i]<<8) | (leds->pixelBuffer[i]));
+
+		for (int i=23; i>=0; i--)
+		{
+			if (tempColor&(1<<i))
+				leds->pwmData[index] = 69;  // 2/3 of 90
+
+			else
+				leds->pwmData[index] = 35;  // 1/3 of 90
+
+			index++;
+		}
+
+	}
+
+	for (int i=0; i<50; i++)
+	{
+		leds->pwmData[index] = 0;
+		index++;
+	}
+	leds->htim->Instance->CCR3 = 0;
+	leds->htim->Instance->CNT = 0;
+	HAL_TIM_PWM_Start_DMA(leds->htim, leds->timChannel, (uint32_t*)leds->pwmData, index);
+	leds->ready = 0;
 }
 
 /**
