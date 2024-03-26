@@ -85,7 +85,7 @@ void pixel_Init(PixelDriver* leds)
 	// SPI specific
 	for(uint16_t i=0; i<PIXEL_BUFFER_SIZE_SPI(leds->numPixels); i++)
 	{
-		leds->pixelBuffer[i] = 0x00;
+		leds->altPixelBuffer[i] = 0x00;
 	}
 }
 
