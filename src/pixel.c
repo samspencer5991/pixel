@@ -184,7 +184,7 @@ ArgbErrorState pixel_Show(PixelDriver* leds)
 		uint32_t tempColor;
 		for (int i= 0; i<leds->numPixels; i++)
 		{
-			tempColor = ((leds->pixelBuffer[i]<<16) | (leds->pixelBuffer[i]<<8) | (leds->pixelBuffer[i]));
+			tempColor = leds->pixelBuffer[i];
 
 			for (int i=23; i>=0; i--)
 			{
