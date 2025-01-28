@@ -44,11 +44,14 @@ typedef struct
 	SPI_HandleTypeDef* hspi;	// STM32 HAL SPI handle
 	uint8_t* altPixelBuffer;	// Used for SPI bit packets or PWM data
 	uint8_t ready;					// Indicates if the previous transmission is complete. Set init value to 0 or undefined
+	uint16_t pwmLowThreshold;	// PWM low threshold for the PWM timer
+	uint16_t pwmHighThreshold;	// PWM high threshold for the PWM timer
 } PixelDriver;
 
 #define ORDER_RGB 1
 #define ORDER_BRG 2
 #define ORDER_GBR 3
+#define ORDER_RBG 4
 
 // 24-bit colour macros (RGB)
 #define WHITE 			0xffffff
@@ -69,10 +72,14 @@ typedef struct
 #define OFF 				0x000000
 
 #define SPI_BYTE_MULTIPLIER	9
-#define NUM_SPI_RESET_BYTES 2
+#define NUM_SPI_RESET_BYTES	2
+
+#define PWM_BYTE_MULTIPLIER	24
+#define NUM_PWM_RESET_BYTES	50
 
 // Used to define the altPixelBuffer size for SPI
 #define PIXEL_BUFFER_SIZE_SPI(num) (num * SPI_BYTE_MULTIPLIER + NUM_SPI_RESET_BYTES)
+#define PIXEL_BUFFER_SIZE_PWM(num) (num * PWM_BYTE_MULTIPLIER + NUM_PWM_RESET_BYTES)
 
 // SHARED FUNCTIONS 
 void pixel_Init(PixelDriver* leds);

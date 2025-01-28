@@ -166,6 +166,12 @@ void pixel_SetPixel(PixelDriver* leds, uint16_t index, uint32_t colour)
 				g = (colour >> 16) & 0xff;
 				b = (colour >> 8) & 0xff;
 			}
+			else if(leds->colourMode == ORDER_RBG)
+			{
+				r = (colour >> 16) & 0xff;
+				g = (colour) & 0xff;
+				b = (colour >> 8) & 0xff;
+			}
 			outputColour = g | (r<<8) | (b<<16);
 			leds->pixelBuffer[index] = outputColour;
 		}
@@ -182,34 +188,34 @@ ArgbErrorState pixel_Show(PixelDriver* leds)
 	{
 		uint32_t index = 0;
 		uint32_t tempColor;
-		for (int i= 0; i<leds->numPixels; i++)
+		for (uint16_t i= 0; i<leds->numPixels; i++)
 		{
 			tempColor = leds->pixelBuffer[i];
 
-			for (int i=23; i>=0; i--)
+			for (int j=23; j>=0; j--)
 			{
-				if (tempColor&(1<<i))
-					leds->altPixelBuffer[index] = 69;  // 2/3 of 90
+				if (tempColor&(1<<j))
+					leds->altPixelBuffer[index] = leds->pwmHighThreshold;		// 2/3 of ARR
 
 				else
-					leds->altPixelBuffer[index] = 35;  // 1/3 of 90
+					leds->altPixelBuffer[index] = leds->pwmLowThreshold;		// 1/3 of ARR
 
 				index++;
 			}
 		}
 
-		for (int i=0; i<50; i++)
+		for (uint8_t i=0; i<50; i++)
 		{
 			leds->altPixelBuffer[index] = 0;
 			index++;
 		}
-		leds->htim->Instance->CCR3 = 0;
+		leds->htim->Instance->CCR2 = 0;
 		leds->htim->Instance->CNT = 0;
 		leds->ready = 0;
 		if(HAL_TIM_PWM_Start_DMA(leds->htim, leds->timChannel, (uint32_t*)leds->altPixelBuffer, index) != HAL_OK)
 			return ArgbHalError;
 		else
-			return ArgbOk;
+ 			return ArgbOk;
 		
 	}
 	else if(leds->protocol == LedSpi)
