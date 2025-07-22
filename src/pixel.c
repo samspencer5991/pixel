@@ -59,12 +59,13 @@ const uint8_t gamma8[] = {
   177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
   215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
 
+  uint8_t sk6812gamma8[256];
 
 // Local function prototypes
 void setPixelSpi(PixelDriver* leds, uint16_t num, uint32_t colour);
 ArgbErrorState showSpi(PixelDriver* leds);
 void show(PixelDriver* leds);
-
+void create_sk6812_gamma_table(float gamma, float brightness, uint8_t table[256]);
 
 // Global functions
 /**
@@ -87,6 +88,9 @@ void pixel_Init(PixelDriver* leds)
 	{
 		leds->altPixelBuffer[i] = 0x00;
 	}
+
+	// Populate gamma LUTs
+	create_sk6812_gamma_table(2.8f, 1.0f, sk6812gamma8);
 }
 
 
@@ -156,24 +160,40 @@ void pixel_SetPixel(PixelDriver* leds, uint16_t index, uint32_t colour)
 		{
 			if(leds->colourMode == ORDER_RGB)
 			{
-				r = (colour >> 16) & 0xff;
-				g = (colour >> 8) & 0xff;
-				b = (colour) & 0xff;
+				b = gamma8[(colour) & 0xff];
+				g = gamma8[(colour >> 8) & 0xff];
+				r = gamma8[(colour >> 16) & 0xff];
 			}
 			else if(leds->colourMode == ORDER_GBR)
 			{
-				r = (colour) & 0xff;
-				g = (colour >> 16) & 0xff;
-				b = (colour >> 8) & 0xff;
+				r = gamma8[(colour) & 0xff];
+				b = gamma8[(colour >> 8) & 0xff];
+				g = gamma8[(colour >> 16) & 0xff];
 			}
 			else if(leds->colourMode == ORDER_RBG)
 			{
-				r = (colour >> 16) & 0xff;
-				g = (colour) & 0xff;
-				b = (colour >> 8) & 0xff;
+				g = gamma8[(colour) & 0xff];
+				b = gamma8[(colour >> 8) & 0xff];
+				r = gamma8[(colour >> 16) & 0xff];
 			}
+
+			// Scale colour channels according to set brightness
+			if(leds->brightness != 255)
+			{
+				float rChunk = (float)r / 255.00;
+				float gChunk = (float)g / 255.00;
+				float bChunk = (float)b / 255.00;
+
+				r = rChunk * leds->brightness;
+				g = gChunk * leds->brightness;
+				b = bChunk * leds->brightness;
+			}
+			
 			outputColour = g | (r<<8) | (b<<16);
 			leds->pixelBuffer[index] = outputColour;
+
+
+			
 		}
 	}
 	else if(leds->protocol == LedSpi)
@@ -261,9 +281,9 @@ void setPixelSpi(PixelDriver* leds, uint16_t pixel, uint32_t colour)
 		}
 		else if(leds->colourMode == ORDER_GBR)
 		{
-			r = gamma8[(colour) & 0xff];
-			g = gamma8[(colour >> 16) & 0xff];
-			b = gamma8[(colour >> 8) & 0xff];
+			r = (colour) & 0xff;
+			g = (colour >> 16) & 0xff;
+			b = (colour >> 8) & 0xff;
 		}
 
 		// Scale colour channels according to set brightness
@@ -491,4 +511,41 @@ void show(PixelDriver* leds)
 #ifdef __cplusplus
 }
 #endif
+}
+
+
+/**
+ * Creates an 8-bit gamma correction table for SK6812-mini LEDs
+ * 
+ * @param gamma The gamma value to use (typically 2.8 for LEDs)
+ * @param brightness Overall brightness scaling (0.0 to 1.0)
+ * @param table Output array of 256 bytes to store the gamma table
+ */
+void create_sk6812_gamma_table(float gamma, float brightness, uint8_t table[256])
+{
+    // Constrain brightness to valid range
+    if (brightness < 0.0f) brightness = 0.0f;
+    if (brightness > 1.0f) brightness = 1.0f;
+    
+    // SK6812-mini LEDs often benefit from a slightly different gamma at low levels
+    const float low_gamma = gamma * 0.7f; // Adjust gamma for low values
+    
+    for (int i = 0; i < 256; i++) {
+        float normalized = (float)i / 255.0f;
+        float corrected;
+        
+        // Apply different gamma for low values to get better low-level control
+        if (normalized < 0.1f) {
+            corrected = powf(normalized / 0.1f, low_gamma) * 0.1f;
+        } else {
+            corrected = powf(normalized, gamma);
+        }
+        
+        // Apply brightness scaling
+        corrected *= brightness;
+        
+        // Clamp and convert to 8-bit
+        if (corrected > 1.0f) corrected = 1.0f;
+        table[i] = (uint8_t)(corrected * 255.0f + 0.5f);
+    }
 }
