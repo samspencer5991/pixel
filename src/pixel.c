@@ -27,6 +27,7 @@
 #include "pixel.h"
 #include "gpio.h"
 #include <stdlib.h>
+#include <math.h>
 
 #ifdef __cplusplus
 extern "C" {
